@@ -12,14 +12,16 @@ const projects = [
   { name: "fenix", sitemap: "https://www.fenixtnt.cz/sitemap.xml", type: "fenix-old" }
 ]
 
-function extractUrls(xml) {
-  const matches = [...xml.matchAll(/<url>([\s\S]*?)<\/url>/g)]
+// 🔥 Nová robustní extrakce <loc>
+function extractLocs(xml) {
+  const matches = [...xml.matchAll(/<loc>(.*?)<\/loc>/g)]
   return matches.map(match => match[1])
 }
 
-function getTagValue(block, tag) {
-  const match = block.match(new RegExp(`<${tag}>(.*?)<\/${tag}>`))
-  return match ? match[1] : null
+// 🔥 Robustní extrakce <lastmod>
+function extractLastmods(xml) {
+  const matches = [...xml.matchAll(/<lastmod>(.*?)<\/lastmod>/g)]
+  return matches.map(match => match[1])
 }
 
 export default async function handler(req, res) {
@@ -32,43 +34,43 @@ export default async function handler(req, res) {
 
       console.log("Fetching:", project.sitemap)
 
-      const response = await fetch(project.sitemap).catch(err => {
-        throw new Error("Fetch failed: " + err.message)
-      })
+      const response = await fetch(project.sitemap)
 
-      if (!response || !response.ok) {
+      if (!response.ok) {
         throw new Error("Invalid response")
       }
 
       const xml = await response.text()
 
-      const blocks = extractUrls(xml)
+      const locs = extractLocs(xml)
+      const lastmods = extractLastmods(xml)
 
       const articles = []
 
-      for (const block of blocks) {
+      for (let i = 0; i < locs.length; i++) {
 
-        const loc = getTagValue(block, "loc")
-        const lastmod = getTagValue(block, "lastmod")
+        const loc = locs[i]
+        const lastmod = lastmods[i] || null
 
         if (!loc) continue
 
+        // 🔎 Filtrace podle typu
         if (project.type === "news" && !loc.includes("/news/")) continue
         if (project.type === "news-events" && !loc.includes("/news-events/")) continue
         if (project.type === "fenix-old" && !loc.includes("/en/news-old/")) continue
 
+        // ❌ Nechceme root stránky typu /news/
+        if (loc.endsWith("/news/") || loc.endsWith("/news-events/")) continue
+
         articles.push({
           project: project.name,
           url: loc,
-          lastmod: lastmod || null
+          lastmod
         })
       }
 
-      try {
-        await kv.set(`articles:${project.name}`, articles)
-      } catch (kvError) {
-        console.log("KV error:", kvError.message)
-      }
+      // 🧠 Uložit do KV
+      await kv.set(`articles:${project.name}`, articles)
 
       results.push({
         project: project.name,
