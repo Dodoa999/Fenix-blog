@@ -1,7 +1,7 @@
 {
   "crons": [
     {
-      "path": "/api/daily-sync",
+      "path": "/api/daily-sync?secret=neco_dlouheho_nahodneho_123XYZ",
       "schedule": "0 3 * * *"
     }
   ]
