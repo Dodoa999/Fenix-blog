@@ -1,53 +1,66 @@
 export default async function handler(req, res) {
-  
-res.setHeader("Access-Control-Allow-Origin", "*");
-res.setHeader("Access-Control-Allow-Methods", "GET");
-res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  
-  const sources = [
-    "https://www.greenest-ecosystem.eu/news?format=json&count=50",
-    "https://www.apolloproject.eu/news?format=json&count=50",
-    "https://www.reuse-batteries.eu/news?format=json&count=50",
-    "https://www.perseus-project.eu/news?format=json&count=50",
-    "https://www.treasure-project.eu/news?format=json&count=50",
-    "https://www.forest-project.eu/news?format=json&count=50",
-    "https://www.carbon4minerals.eu/news-events?format=json&count=50",
-    "https://www.teapots-project.eu/news?format=json&count=50",
-    "https://www.am2pm-project.eu/news?format=json&count=50",
-    "https://www.herit4ages.eu/news?format=json&count=50",
-    "https://www.fenixtnt.cz/en/news?format=json&count=50"
+
+  // CORS
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  const baseSources = [
+    "https://www.greenest-ecosystem.eu/news",
+    "https://www.apolloproject.eu/news",
+    "https://www.reuse-batteries.eu/news",
+    "https://www.perseus-project.eu/news",
+    "https://www.treasure-project.eu/news",
+    "https://www.forest-project.eu/news",
+    "https://www.carbon4minerals.eu/news-events",
+    "https://www.teapots-project.eu/news",
+    "https://www.am2pm-project.eu/news",
+    "https://www.herit4ages.eu/news",
+    "https://www.fenixtnt.cz/en/news"
   ];
+
+  const PAGE_SIZE = 50;
+  const MAX_PER_SITE = 200; // 🔥 můžeš změnit třeba na 300
 
   try {
 
-    const responses = await Promise.all(
-      sources.map(async (url) => {
-        try {
-          const response = await fetch(url);
-          const data = await response.json();
+    const fetchSite = async (baseUrl) => {
+      let allItems = [];
+      let offset = 0;
 
-          const items =
-            data.items ||
-            data.entries ||
-            data.collection?.items ||
-            [];
+      while (offset < MAX_PER_SITE) {
 
-          return items.map(item => ({
-            id: item.id,
-            title: item.title,
-            link: item.fullUrl || item.url,
-            image: item.assetUrl || item.thumbnail || "",
-            excerpt: item.excerpt || "",
-            date: new Date(item.publishOn || item.pubDate || 0)
-          }));
+        const url = `${baseUrl}?format=json&count=${PAGE_SIZE}&offset=${offset}`;
+        const response = await fetch(url);
+        const data = await response.json();
 
-        } catch (err) {
-          return [];
-        }
-      })
+        const items =
+          data.items ||
+          data.entries ||
+          data.collection?.items ||
+          [];
+
+        if (!items.length) break;
+
+        allItems.push(...items);
+        offset += PAGE_SIZE;
+      }
+
+      return allItems;
+    };
+
+    const results = await Promise.all(
+      baseSources.map(fetchSite)
     );
 
-    let allPosts = responses.flat();
+    let allPosts = results.flat().map(item => ({
+      id: item.id,
+      title: item.title,
+      link: item.fullUrl || item.url,
+      image: item.assetUrl || item.thumbnail || "",
+      excerpt: item.excerpt || "",
+      date: new Date(item.publishOn || item.pubDate || 0)
+    }));
 
     const uniquePosts = Array.from(
       new Map(allPosts.map(item => [item.id, item])).values()
