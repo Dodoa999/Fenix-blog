@@ -1,31 +1,45 @@
+let cachedPosts = [];
+let lastFetchTime = 0;
+
+const CACHE_DURATION = 10 * 60 * 1000; // 10 minut
+const PAGE_SIZE = 50;
+const OFFSETS = [0, 50, 100, 150, 200, 250]; // až 300 článků
+
+const baseSources = [
+  "https://www.greenest-ecosystem.eu/news",
+  "https://www.apolloproject.eu/news",
+  "https://www.reuse-batteries.eu/news",
+  "https://www.perseus-project.eu/news",
+  "https://www.treasure-project.eu/news",
+  "https://www.forest-project.eu/news",
+  "https://www.carbon4minerals.eu/news-events",
+  "https://www.teapots-project.eu/news",
+  "https://www.am2pm-project.eu/news",
+  "https://www.herit4ages.eu/news",
+  "https://www.fenixtnt.cz/en/news"
+];
+
 export default async function handler(req, res) {
 
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  const baseSources = [
-    "https://www.greenest-ecosystem.eu/news",
-    "https://www.apolloproject.eu/news",
-    "https://www.reuse-batteries.eu/news",
-    "https://www.perseus-project.eu/news",
-    "https://www.treasure-project.eu/news",
-    "https://www.forest-project.eu/news",
-    "https://www.carbon4minerals.eu/news-events",
-    "https://www.teapots-project.eu/news",
-    "https://www.am2pm-project.eu/news",
-    "https://www.herit4ages.eu/news",
-    "https://www.fenixtnt.cz/en/news"
-  ];
+  const now = Date.now();
 
-  const OFFSETS = [0, 50, 100, 150];
+  // 🔥 Pokud máme čerstvá data, jen je vrať
+  if (cachedPosts.length > 0 && now - lastFetchTime < CACHE_DURATION) {
+    return res.status(200).json({
+      total: cachedPosts.length,
+      posts: cachedPosts
+    });
+  }
 
   try {
 
     const fetchSite = async (baseUrl) => {
 
       const requests = OFFSETS.map(offset =>
-        fetch(`${baseUrl}?format=json&count=50&offset=${offset}`)
+        fetch(`${baseUrl}?format=json&count=${PAGE_SIZE}&offset=${offset}`)
           .then(res => res.json())
           .catch(() => null)
       );
@@ -68,7 +82,9 @@ export default async function handler(req, res) {
 
     uniquePosts.sort((a, b) => b.date - a.date);
 
-    res.setHeader("Cache-Control", "s-maxage=600, stale-while-revalidate");
+    // 🔥 uložíme do cache
+    cachedPosts = uniquePosts;
+    lastFetchTime = now;
 
     res.status(200).json({
       total: uniquePosts.length,
