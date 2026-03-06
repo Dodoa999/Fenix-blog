@@ -1,5 +1,9 @@
 export default async function handler(req, res) {
-
+  
+res.setHeader("Access-Control-Allow-Origin", "*");
+res.setHeader("Access-Control-Allow-Methods", "GET");
+res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  
   const sources = [
     "https://www.greenest-ecosystem.eu/news?format=json&count=50",
     "https://www.apolloproject.eu/news?format=json&count=50",
