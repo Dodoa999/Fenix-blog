@@ -15,49 +15,62 @@ const projects = [
 function dedupeByUrl(items) {
   const map = new Map()
   items.forEach(item => {
-    map.set(item.url, item)
+    if (item.url) {
+      map.set(item.url, item)
+    }
   })
   return Array.from(map.values())
 }
 
 export default async function handler(req, res) {
 
+  // 🔐 CRON SECRET ochrana
+  const { secret } = req.query
+
+  if (secret !== process.env.CRON_SECRET) {
+    return res.status(401).json({ message: "Unauthorized" })
+  }
+
   try {
 
     let archiveAll = []
 
-    // 1️⃣ načti existující archiv
+    // 1️⃣ načti existující archiv z KV
     for (const project of projects) {
       const stored = await kv.get(`articles:${project.name}`)
-      if (stored) {
+      if (stored && Array.isArray(stored)) {
         archiveAll.push(...stored)
       }
     }
 
     let liveAll = []
 
-    // 2️⃣ načti posledních 50
+    // 2️⃣ načti posledních 50 live článků
     for (const project of projects) {
 
       try {
         const response = await fetch(project.json)
-        if (!response.ok) continue
+
+        if (!response.ok) {
+          console.log("Fetch failed:", project.name)
+          continue
+        }
 
         const data = await response.json()
         const items = data.items || data.entries || []
 
         const mapped = items.map(item => ({
           project: project.name,
-          url: item.fullUrl || item.url,
-          title: item.title,
+          url: item.fullUrl || item.url || null,
+          title: item.title || null,
           image: item.assetUrl || null,
           date: item.publishOn || item.pubDate || null
-        }))
+        })).filter(item => item.url)
 
         liveAll.push(...mapped)
 
       } catch (err) {
-        console.log("Live fetch failed:", project.name)
+        console.log("Live fetch error:", project.name)
       }
     }
 
@@ -65,13 +78,18 @@ export default async function handler(req, res) {
     let merged = [...archiveAll, ...liveAll]
     merged = dedupeByUrl(merged)
 
-    // 4️⃣ seřadit
+    // 4️⃣ seřazení podle data
     merged.sort((a, b) => {
-      return new Date(b.date || b.lastmod) - new Date(a.date || a.lastmod)
+      const dateA = new Date(a.date || a.lastmod || 0)
+      const dateB = new Date(b.date || b.lastmod || 0)
+      return dateB - dateA
     })
 
-    // 5️⃣ uložit jako globální dataset
+    // 5️⃣ uložit globální dataset
     await kv.set("news:global", merged)
+
+    // 6️⃣ uložit timestamp posledního syncu (pro debug)
+    await kv.set("news:lastSync", new Date().toISOString())
 
     return res.status(200).json({
       message: "Daily sync completed",
