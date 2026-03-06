@@ -1,7 +1,7 @@
 import { kv } from "@vercel/kv"
 
 const projects = [
-  { name: "apollo", sitemap: "https://www.apollo-project.eu/sitemap.xml", type: "news" },
+  { name: "apollo", sitemap: "https://www.apolloproject.eu/sitemap.xml", type: "news" },
   { name: "reuse", sitemap: "https://www.reuse-batteries.eu/sitemap.xml", type: "news" },
   { name: "perseus", sitemap: "https://www.perseus-project.eu/sitemap.xml", type: "news" },
   { name: "treasure", sitemap: "https://www.treasure-project.eu/sitemap.xml", type: "news" },
