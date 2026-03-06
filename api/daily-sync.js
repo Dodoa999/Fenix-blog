@@ -64,16 +64,19 @@ export default async function handler(req, res) {
 
             const url = item.fullUrl || item.url || null
             const title = item.title ? item.title.trim() : null
-            const date = item.publishOn || item.pubDate || null
 
-            // ❌ základní validace
+            // ✅ UPRAVENO – přidán lastmod fallback
+            const date =
+              item.publishOn ||
+              item.pubDate ||
+              item.lastmod ||
+              null
+
             if (!url) return null
             if (!title) return null
 
-            // ❌ ignoruj category stránky
             if (url.includes("/category/")) return null
 
-            // ❌ ignoruj root listingy
             if (
               url.endsWith("/news/") ||
               url.endsWith("/news-events/") ||
