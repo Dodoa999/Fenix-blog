@@ -1,28 +1,29 @@
 export default async function handler(req, res) {
 
   const sources = [
-    { url: "https://www.greenest-ecosystem.eu/news?format=json&count=50", logo: "logo", name: "Greenest" },
-    { url: "https://www.apolloproject.eu/news?format=json&count=50", logo: "logo", name: "Apollo" },
-    { url: "https://www.reuse-batteries.eu/news?format=json&count=50", logo: "logo", name: "Reuse Batteries" },
-    { url: "https://www.perseus-project.eu/news?format=json&count=50", logo: "logo", name: "Perseus" },
-    { url: "https://www.treasure-project.eu/news?format=json&count=50", logo: "logo", name: "Treasure" },
-    { url: "https://www.forest-project.eu/news?format=json&count=50", logo: "logo", name: "Forest" },
-    { url: "https://www.carbon4minerals.eu/news-events?format=json&count=50", logo: "logo", name: "Carbon4Minerals" },
-    { url: "https://www.teapots-project.eu/news?format=json&count=50", logo: "logo", name: "Teapots" },
-    { url: "https://www.am2pm-project.eu/news?format=json&count=50", logo: "logo", name: "AM2PM" },
-    { url: "https://www.herit4ages.eu/news?format=json&count=50", logo: "logo", name: "Herit4Ages" },
-    { url: "https://www.fenixtnt.cz/en/news?format=json&count=50", logo: "logo", name: "Fenix TNT" }
+    "https://www.greenest-ecosystem.eu/news?format=json&count=50",
+    "https://www.apolloproject.eu/news?format=json&count=50",
+    "https://www.reuse-batteries.eu/news?format=json&count=50",
+    "https://www.perseus-project.eu/news?format=json&count=50",
+    "https://www.treasure-project.eu/news?format=json&count=50",
+    "https://www.forest-project.eu/news?format=json&count=50",
+    "https://www.carbon4minerals.eu/news-events?format=json&count=50",
+    "https://www.teapots-project.eu/news?format=json&count=50",
+    "https://www.am2pm-project.eu/news?format=json&count=50",
+    "https://www.herit4ages.eu/news?format=json&count=50",
+    "https://www.fenixtnt.cz/en/news?format=json&count=50"
   ];
 
   try {
 
     const responses = await Promise.all(
-      sources.map(async (source) => {
+      sources.map(async (url) => {
         try {
-          const response = await fetch(source.url);
+          const response = await fetch(url);
           const data = await response.json();
 
           const items =
+            data.items ||
             data.entries ||
             data.collection?.items ||
             [];
@@ -33,8 +34,7 @@ export default async function handler(req, res) {
             link: item.fullUrl || item.url,
             image: item.assetUrl || item.thumbnail || "",
             excerpt: item.excerpt || "",
-            date: new Date(item.publishOn || item.pubDate),
-            project: source.name
+            date: new Date(item.publishOn || item.pubDate || 0)
           }));
 
         } catch (err) {
@@ -59,6 +59,6 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    res.status(500).json({ error: "Feed aggregation failed" });
+    res.status(500).json({ error: "Aggregation failed" });
   }
 }
