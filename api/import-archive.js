@@ -23,30 +23,36 @@ function getTagValue(block, tag) {
 }
 
 export default async function handler(req, res) {
+
   const results = []
 
   for (const project of projects) {
+
     try {
-      console.log(`Importing ${project.name}...`)
 
-      const response = await fetch(project.sitemap)
+      console.log("Fetching:", project.sitemap)
 
-      if (!response.ok) {
-        throw new Error(`Failed to fetch sitemap`)
+      const response = await fetch(project.sitemap).catch(err => {
+        throw new Error("Fetch failed: " + err.message)
+      })
+
+      if (!response || !response.ok) {
+        throw new Error("Invalid response")
       }
 
       const xml = await response.text()
+
       const blocks = extractUrls(xml)
 
-      let articles = []
+      const articles = []
 
       for (const block of blocks) {
+
         const loc = getTagValue(block, "loc")
         const lastmod = getTagValue(block, "lastmod")
 
         if (!loc) continue
 
-        // filtrovat jen články podle typu
         if (project.type === "news" && !loc.includes("/news/")) continue
         if (project.type === "news-events" && !loc.includes("/news-events/")) continue
         if (project.type === "fenix-old" && !loc.includes("/en/news-old/")) continue
@@ -58,7 +64,11 @@ export default async function handler(req, res) {
         })
       }
 
-      await kv.set(`articles:${project.name}`, articles)
+      try {
+        await kv.set(`articles:${project.name}`, articles)
+      } catch (kvError) {
+        console.log("KV error:", kvError.message)
+      }
 
       results.push({
         project: project.name,
@@ -67,18 +77,18 @@ export default async function handler(req, res) {
       })
 
     } catch (error) {
-      console.error(`Error importing ${project.name}:`, error.message)
 
       results.push({
         project: project.name,
         status: "failed",
         error: error.message
       })
+
     }
   }
 
-  res.status(200).json({
-    message: "Import finished",
+  return res.status(200).json({
+    message: "Import finished safely",
     results
   })
 }
