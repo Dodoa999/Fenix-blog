@@ -1,34 +1,42 @@
 import { kv } from "@vercel/kv"
 
 const projects = [
-  { name: "apollo", sitemap: "https://www.apolloproject.eu/sitemap.xml", type: "news" },
-  { name: "reuse", sitemap: "https://www.reuse-batteries.eu/sitemap.xml", type: "news" },
-  { name: "perseus", sitemap: "https://www.perseus-project.eu/sitemap.xml", type: "news" },
-  { name: "treasure", sitemap: "https://www.treasure-project.eu/sitemap.xml", type: "news" },
-  { name: "forest", sitemap: "https://www.forest-project.eu/sitemap.xml", type: "news" },
-  { name: "carbon4minerals", sitemap: "https://www.carbon4minerals.eu/sitemap.xml", type: "news-events" },
-  { name: "am2pm", sitemap: "https://www.am2pm-project.eu/sitemap.xml", type: "news" },
-  { name: "herit4ages", sitemap: "https://www.herit4ages.eu/sitemap.xml", type: "news" },
-  { name: "fenix", sitemap: "https://www.fenixtnt.cz/sitemap.xml", type: "fenix-news" }
+  { name: "apollo", sitemap: "https://www.apolloproject.eu/sitemap.xml", match: "/news/" },
+  { name: "reuse", sitemap: "https://www.reuse-batteries.eu/sitemap.xml", match: "/news/" },
+  { name: "perseus", sitemap: "https://www.perseus-project.eu/sitemap.xml", match: "/news/" },
+  { name: "treasure", sitemap: "https://www.treasure-project.eu/sitemap.xml", match: "/news/" },
+  { name: "forest", sitemap: "https://www.forest-project.eu/sitemap.xml", match: "/news/" },
+  { name: "carbon4minerals", sitemap: "https://www.carbon4minerals.eu/sitemap.xml", match: "/news-events/" },
+  { name: "am2pm", sitemap: "https://www.am2pm-project.eu/sitemap.xml", match: "/news/" },
+  { name: "herit4ages", sitemap: "https://www.herit4ages.eu/sitemap.xml", match: "/news/" },
+  { name: "fenix", sitemap: "https://www.fenixtnt.cz/sitemap.xml", match: "/en/news/" }
 ]
 
-// extrakce <loc>
 function extractLocs(xml) {
   const matches = [...xml.matchAll(/<loc>(.*?)<\/loc>/g)]
   return matches.map(m => m[1])
 }
 
-// extrakce <lastmod>
-function extractLastmods(xml) {
-  const matches = [...xml.matchAll(/<lastmod>(.*?)<\/lastmod>/g)]
-  return matches.map(m => m[1])
+function extractMeta(html, property) {
+  const regex = new RegExp(
+    `<meta[^>]+property=["']${property}["'][^>]+content=["']([^"]+)["']`,
+    "i"
+  )
+  const match = html.match(regex)
+  return match ? match[1] : null
+}
+
+function extractDescription(html) {
+  const regex = /<meta[^>]+name=["']description["'][^>]+content=["']([^"]+)["']/i
+  const match = html.match(regex)
+  return match ? match[1] : null
 }
 
 export default async function handler(req, res) {
 
   try {
 
-    const results = []
+    let totalImported = 0
 
     for (const project of projects) {
 
@@ -36,49 +44,60 @@ export default async function handler(req, res) {
       if (!response.ok) continue
 
       const xml = await response.text()
-
       const locs = extractLocs(xml)
-      const lastmods = extractLastmods(xml)
+
+      const articleUrls = locs.filter(url =>
+        url.includes(project.match) &&
+        !url.endsWith(project.match)
+      )
 
       const articles = []
 
-      for (let i = 0; i < locs.length; i++) {
+      for (const url of articleUrls) {
 
-        const url = locs[i]
-        const lastmod = lastmods[i] || null
+        try {
 
-        if (!url) continue
+          const pageRes = await fetch(url)
+          if (!pageRes.ok) continue
 
-        // Filtrace podle typu
-        if (project.type === "news" && !url.includes("/news/")) continue
-        if (project.type === "news-events" && !url.includes("/news-events/")) continue
-        if (project.type === "fenix-news" && !url.includes("/en/news/")) continue
+          const html = await pageRes.text()
 
-        // Nechceme root listing
-        if (
-          url.endsWith("/news/") ||
-          url.endsWith("/news-events/") ||
-          url.endsWith("/en/news/")
-        ) continue
+          const title =
+            extractMeta(html, "og:title") ||
+            null
 
-        articles.push({
-          project: project.name,
-          url,
-          lastmod
-        })
+          const image =
+            extractMeta(html, "og:image") ||
+            null
+
+          const description =
+            extractDescription(html) ||
+            null
+
+          if (!title) continue
+
+          articles.push({
+            project: project.name,
+            url,
+            title,
+            image,
+            excerpt: description,
+            date: null
+          })
+
+        } catch (err) {
+          console.log("Failed article:", url)
+        }
       }
 
       await kv.set(`articles:${project.name}`, articles)
 
-      results.push({
-        project: project.name,
-        imported: articles.length
-      })
+      totalImported += articles.length
     }
 
     return res.status(200).json({
-      message: "Full archive import completed",
-      results
+      message: "Full professional archive import completed",
+      total: totalImported
     })
 
   } catch (error) {
