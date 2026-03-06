@@ -9,7 +9,7 @@ const projects = [
   { name: "carbon4minerals", json: "https://www.carbon4minerals.eu/news-events?format=json&count=50" },
   { name: "am2pm", json: "https://www.am2pm-project.eu/news?format=json&count=50" },
   { name: "herit4ages", json: "https://www.herit4ages.eu/news?format=json&count=50" },
-  { name: "fenix", json: "https://www.fenixtnt.cz/en/news-old?format=json&count=50" }
+  { name: "fenix", json: "https://www.fenixtnt.cz/en/news?format=json&count=50" }
 ]
 
 function dedupeByUrl(items) {
