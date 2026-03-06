@@ -18,48 +18,58 @@ export default async function handler(req, res) {
 
   try {
 
-    // 1️⃣ načti archiv z databáze
-    let storedPosts = await kv.get("all-posts") || [];
+    // 1️⃣ načteme archiv z KV
+    let archive = await kv.get("news-archive");
+    if (!archive) archive = [];
 
-    // převedeme na mapu kvůli deduplikaci
-    const postMap = new Map(storedPosts.map(p => [p.id, p]));
+    // 2️⃣ stáhneme nové články
+    const responses = await Promise.all(
+      sources.map(async (url) => {
+        try {
+          const response = await fetch(url);
+          const data = await response.json();
 
-    // 2️⃣ stáhni nové články
-    for (const url of sources) {
-      try {
-        const response = await fetch(url);
-        const data = await response.json();
-        if (!data.entries) continue;
+          if (!data.items) return [];
 
-        data.entries.forEach(item => {
-          postMap.set(item.id, {
-            id: item.id,
+          return data.items.map(item => ({
+            id: item.id || item.guid || item.url,
             title: item.title,
             link: item.fullUrl || item.url,
             image: item.assetUrl || "",
             excerpt: item.excerpt || "",
             date: item.publishOn
-          });
-        });
+          }));
 
-      } catch (e) {}
-    }
+        } catch {
+          return [];
+        }
+      })
+    );
 
-    // 3️⃣ zpět na pole
-    const allPosts = Array.from(postMap.values());
+    let newPosts = responses.flat();
 
-    // 4️⃣ seřadit podle data
-    allPosts.sort((a, b) => new Date(b.date) - new Date(a.date));
+    // 3️⃣ spojíme archiv + nové články
+    let combined = [...archive, ...newPosts];
 
-    // 5️⃣ uložit zpět do databáze
-    await kv.set("all-posts", allPosts);
+    // 4️⃣ odstraníme duplicity podle ID
+    const uniquePosts = Array.from(
+      new Map(combined.map(item => [item.id, item])).values()
+    );
+
+    // 5️⃣ seřadíme podle data
+    uniquePosts.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    // 6️⃣ uložíme zpět do KV
+    await kv.set("news-archive", uniquePosts);
+
+    res.setHeader("Cache-Control", "s-maxage=600, stale-while-revalidate");
 
     res.status(200).json({
-      total: allPosts.length,
-      posts: allPosts
+      total: uniquePosts.length,
+      posts: uniquePosts
     });
 
   } catch (error) {
-    res.status(500).json({ error: "Archive system failed" });
+    res.status(500).json({ error: "Archive aggregation failed" });
   }
 }
