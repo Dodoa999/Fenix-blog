@@ -1,33 +1,25 @@
 import { kv } from "@vercel/kv"
 
 const projects = [
-  { name: "apollo", sitemap: "https://www.apolloproject.eu/sitemap.xml", match: "/news/" },
-  { name: "reuse", sitemap: "https://www.reuse-batteries.eu/sitemap.xml", match: "/news/" },
-  { name: "perseus", sitemap: "https://www.perseus-project.eu/sitemap.xml", match: "/news/" },
-  { name: "treasure", sitemap: "https://www.treasure-project.eu/sitemap.xml", match: "/news/" },
-  { name: "forest", sitemap: "https://www.forest-project.eu/sitemap.xml", match: "/news/" },
-  { name: "carbon4minerals", sitemap: "https://www.carbon4minerals.eu/sitemap.xml", match: "/news-events/" },
-  { name: "am2pm", sitemap: "https://www.am2pm-project.eu/sitemap.xml", match: "/news/" },
-  { name: "herit4ages", sitemap: "https://www.herit4ages.eu/sitemap.xml", match: "/news/" },
-  { name: "fenix", sitemap: "https://www.fenixtnt.cz/sitemap.xml", match: "/en/news/" }
+  { name: "apollo", sitemap: "https://www.apolloproject.eu/sitemap.xml" },
+  { name: "reuse", sitemap: "https://www.reuse-batteries.eu/sitemap.xml" },
+  { name: "perseus", sitemap: "https://www.perseus-project.eu/sitemap.xml" },
+  { name: "treasure", sitemap: "https://www.treasure-project.eu/sitemap.xml" },
+  { name: "forest", sitemap: "https://www.forest-project.eu/sitemap.xml" },
+  { name: "carbon4minerals", sitemap: "https://www.carbon4minerals.eu/sitemap.xml" },
+  { name: "am2pm", sitemap: "https://www.am2pm-project.eu/sitemap.xml" },
+  { name: "herit4ages", sitemap: "https://www.herit4ages.eu/sitemap.xml" },
+  { name: "fenix", sitemap: "https://www.fenixtnt.cz/sitemap.xml" }
 ]
 
-function extractLocs(xml) {
-  const matches = [...xml.matchAll(/<loc>(.*?)<\/loc>/g)]
-  return matches.map(m => m[1])
-}
-
 function extractMeta(html, property) {
-  const regex = new RegExp(
-    `<meta[^>]+property=["']${property}["'][^>]+content=["']([^"]+)["']`,
-    "i"
-  )
+  const regex = new RegExp(`<meta[^>]+property=["']${property}["'][^>]+content=["']([^"']+)["']`, "i")
   const match = html.match(regex)
   return match ? match[1] : null
 }
 
-function extractDescription(html) {
-  const regex = /<meta[^>]+name=["']description["'][^>]+content=["']([^"]+)["']/i
+function extractNameMeta(html, name) {
+  const regex = new RegExp(`<meta[^>]+name=["']${name}["'][^>]+content=["']([^"']+)["']`, "i")
   const match = html.match(regex)
   return match ? match[1] : null
 }
@@ -40,39 +32,41 @@ export default async function handler(req, res) {
 
     for (const project of projects) {
 
+      console.log("Processing:", project.name)
+
       const response = await fetch(project.sitemap)
-      if (!response.ok) continue
-
       const xml = await response.text()
-      const locs = extractLocs(xml)
 
-      const articleUrls = locs.filter(url =>
-        url.includes(project.match) &&
-        !url.endsWith(project.match)
-      )
+      const urls = [...xml.matchAll(/<loc>(.*?)<\/loc>/g)]
+        .map(match => match[1])
+        .filter(url =>
+          url.includes("/news") &&
+          !url.includes("/category/") &&
+          !url.endsWith("/news") &&
+          !url.endsWith("/news/")
+        )
 
       const articles = []
 
-      for (const url of articleUrls) {
+      for (const url of urls) {
 
         try {
 
           const pageRes = await fetch(url)
-          if (!pageRes.ok) continue
-
           const html = await pageRes.text()
 
           const title =
             extractMeta(html, "og:title") ||
-            null
+            extractNameMeta(html, "twitter:title")
 
           const image =
-            extractMeta(html, "og:image") ||
-            null
+            extractMeta(html, "og:image")
+
+          const published =
+            extractMeta(html, "article:published_time")
 
           const description =
-            extractDescription(html) ||
-            null
+            extractNameMeta(html, "description")
 
           if (!title) continue
 
@@ -80,19 +74,21 @@ export default async function handler(req, res) {
             project: project.name,
             url,
             title,
-            image,
-            excerpt: description,
-            date: null
+            image: image || null,
+            excerpt: description || null,
+            date: published || null
           })
 
         } catch (err) {
-          console.log("Failed article:", url)
+          console.log("Failed:", url)
         }
       }
 
       await kv.set(`articles:${project.name}`, articles)
 
       totalImported += articles.length
+
+      console.log(project.name, "imported:", articles.length)
     }
 
     return res.status(200).json({
