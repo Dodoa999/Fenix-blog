@@ -1,6 +1,5 @@
 export default async function handler(req, res) {
 
-  // CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -19,34 +18,35 @@ export default async function handler(req, res) {
     "https://www.fenixtnt.cz/en/news"
   ];
 
-  const PAGE_SIZE = 50;
-  const MAX_PER_SITE = 200; // 🔥 můžeš změnit třeba na 300
+  const OFFSETS = [0, 50, 100, 150];
 
   try {
 
     const fetchSite = async (baseUrl) => {
-      let allItems = [];
-      let offset = 0;
 
-      while (offset < MAX_PER_SITE) {
+      const requests = OFFSETS.map(offset =>
+        fetch(`${baseUrl}?format=json&count=50&offset=${offset}`)
+          .then(res => res.json())
+          .catch(() => null)
+      );
 
-        const url = `${baseUrl}?format=json&count=${PAGE_SIZE}&offset=${offset}`;
-        const response = await fetch(url);
-        const data = await response.json();
+      const responses = await Promise.all(requests);
 
-        const items =
+      let items = [];
+
+      responses.forEach(data => {
+        if (!data) return;
+
+        const chunk =
           data.items ||
           data.entries ||
           data.collection?.items ||
           [];
 
-        if (!items.length) break;
+        items.push(...chunk);
+      });
 
-        allItems.push(...items);
-        offset += PAGE_SIZE;
-      }
-
-      return allItems;
+      return items;
     };
 
     const results = await Promise.all(
